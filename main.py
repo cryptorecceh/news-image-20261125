@@ -91,6 +91,11 @@ def _load_fonts():
             raise ValueError("font %s parse ended at %d of %d"
                              % (name, pos, len(raw)))
         fonts[name] = (height, glyphs)
+    # The sans10 '+' glyph in the blob lost its vertical stroke (only the
+    # horizontal bar survived the rasterisation), so it printed as '-'.
+    # Redraw it: a vertical stroke at column 2 with the bar on row 6.
+    # Bitmasks for a 6-wide glyph, pixel i on bit (5 - i).
+    fonts["sans10"][1]["+"] = (6, (0, 0, 0, 8, 8, 8, 30, 8, 8, 8, 0, 0, 0))
     return fonts
 
 
@@ -276,17 +281,18 @@ LEADS = [
      "REUTERS - 20:41 UTC, 24 NOV", "scales"),
     ("SAUDI ARABIA",
      "Houthis hit Riyadh's tallest tower, 11 hurt",
-     "A missile struck the PIF tower in the capital's financial district, "
-     "wounding 11 and smashing windows - the second such attack in under "
-     "a week. Saudi defences intercepted the launch; the UK imposed fresh "
-     "sanctions on the group the same day.",
+     "Yemen's Houthi fighters struck the tallest tower in the Saudi "
+     "capital, wounding at least 11 people - the second such attack in "
+     "under a week. Saudi Civil Defence posted a picture of the "
+     "landmark tower, home to the Saudi Public Investment Fund. The UK "
+     "imposed fresh sanctions on the group the same day.",
      "REUTERS - 00:29, 25 NOV CYCLE", "tower"),
     ("UKRAINE WAR",
      "Zelensky: Ukraine hit a Russian ship in the Gulf of Finland",
-     "The president confirmed a drone-boat strike on a Russian shadow-"
-     "fleet tanker on Saturday, now under tow to St Petersburg. Norway "
-     "urged caution. Russia said Ukraine attacked its Black Sea oil "
-     "plants and vowed a response.",
+     "The president confirmed a drone-boat strike on a Russian cargo "
+     "ship on Saturday, now under tow to St Petersburg. Norway urged "
+     "caution. Russia said Ukraine attacked its Black Sea oil plants "
+     "and vowed a response.",
      "REUTERS - STRIKE SAT 22 NOV", "ship"),
 ]
 
@@ -422,6 +428,13 @@ MAP_DOTS = [
     ("Singapore", 1.35, 103.82),
     ("Madrid", 40.42, -3.70),
 ]
+
+# Cartographic displacement, in pixels, for map dots that sit too close
+# to read apart: Brooklyn and Langley are 5 px apart on this map, so
+# their dots merge into one blob. Nudging them a few pixels each way
+# keeps each dot readable; the shift is ~2 degrees, inside the map's
+# own roughness.
+MAP_NUDGE = {0: (3, -3), 4: (-3, 3)}
 
 # Rough continent outlines, as (lon, lat) pairs per polygon.
 CONTINENTS = [
@@ -572,8 +585,10 @@ def _bottom(sheet):
     sheet.frame(mx, my, mw, mh, INK, 1)
     for i, (label, lat, lon) in enumerate(MAP_DOTS):
         px, py = _project(lon, lat, mx, my, mw, mh)
-        sheet.spot(int(px), int(py), 4, RED)
-        paint(sheet, "sansb10", int(px) + 6, int(py) - 5, str(i + 1), RED)
+        dx, dy = MAP_NUDGE.get(i, (0, 0))
+        sheet.spot(int(px) + dx, int(py) + dy, 4, RED)
+        paint(sheet, "sansb10", int(px) + dx + 6, int(py) + dy - 5,
+              str(i + 1), RED)
     for i, (label, lat, lon) in enumerate(MAP_DOTS):
         r, c = divmod(i, 3)
         lx = M + c * 160
